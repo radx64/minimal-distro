@@ -34,7 +34,7 @@ project_dir=$(pwd)
 
 ##temporary for easy clean
 project_dir=$project_dir/temp
-[ -d $project_dir ] || mkdir mkdir $project_dir
+[ -d $project_dir ] || mkdir $project_dir
 
 ### directories
 sources=$project_dir/sources
@@ -74,4 +74,5 @@ echo -e "${WHITE}Step 5.${GREEN} Saving bzImage${ENDCOLOR}"
 cp arch/x86/boot/bzImage $image 
 
 echo -e "${WHITE}Step 6.${RED} Running temporary qemu to test bzImage. It will kernel panic!${ENDCOLOR}"
-qemu-system-x86_64 --kernel $image/bzImage
+### CTRL + A x to kill nographic qemu
+qemu-system-x86_64 -nographic --kernel $image/bzImage  --append "console=ttyS0,9600 console=tty0"
