@@ -101,13 +101,16 @@ image_initramfs=$project_dir/image/initramfs
 [ -d $image ] || mkdir $image
 [ -d $image_initramfs ] || mkdir $image_initramfs
 
+arch=$(uname -m)
+[ $arch = 'i686' ] && arch="i386" # hack i686 to i386 packages :D
+
 ### KERNEL BUILD ###
 cd $sources_kernel
 
-if [ -f ${build_kernel}/bzImage ] ; then
-    echo -e "Do you want to use previously build kernel? [Y/n]:"
-    read answer
-    answer=${answer:-Y}
+if [ -f ${build_kernel}/*/arch/$arch/boot/bzImage ] ; then
+    echo -e "Do you want to use previously build kernel? (use n if want to rebuild on changed config) [Y/n]:"
+    read choice
+    choice=${choice:-Y}
 fi
 
 if [[ "$choice" =~ ^[Yy]$ ]]; then
@@ -139,8 +142,6 @@ else
     make -j$(nproc)
 
     echo -e "${WHITE}Step 1.5.${GREEN} Saving bzImage${ENDC}"
-    arch=$(uname -m)
-    [ $arch = 'i686' ] && arch="i386" # hack i686 to i386 packages :D
     cp arch/$arch/boot/bzImage $image 
 fi
 
