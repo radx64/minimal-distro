@@ -109,11 +109,11 @@ cd $sources_kernel
 
 if [ -f ${build_kernel}/*/arch/${arch}/boot/bzImage ] ; then
     echo -e "Do you want to use previously build kernel? (use n if want to rebuild on changed config) [Y/n]:"
-    read choice
-    choice=${choice:-Y}
+    read kernel_choice
+    kernel_choice=${kernel_choice:-Y}
 fi
 
-if [[ "$choice" =~ ^[Yy]$ ]]; then
+if [[ "$kernel_choice" =~ ^[Yy]$ ]]; then
     echo -e "Using already build kernel from ${build_kernel}"
 else
     echo -e "${WHITE}Step 1.1.${GREEN} Downloading kernel${ENDC}"
@@ -145,17 +145,16 @@ else
     cp arch/$arch/boot/bzImage $image 
 fi
 
-
 ### USERSPACE BUILD ###
 cd $sources_userspace
 
 if [ -f ${build_userspace}/*/busybox ] ; then
     echo -e "Do you want to use previously build userspace toolkit? (use n if want to rebuild on changed config) [Y/n]:"
-    read userspace_choice
-    userspace_choice=${userspace_choice:-Y}
+    read userspace_kernel_choice
+    userspace_kernel_choice=${userspace_kernel_choice:-Y}
 fi
 
-if [[ "$userspace_choice" =~ ^[Yy]$ ]]; then
+if [[ "$userspace_kernel_choice" =~ ^[Yy]$ ]]; then
     echo -e "Using already build userspace toolkit from ${build_userspace}"
 else
     echo -e "${WHITE}Step 2.1.${GREEN} Downloading userspace${ENDC}"
