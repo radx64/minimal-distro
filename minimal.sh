@@ -102,12 +102,12 @@ image_initramfs=$project_dir/image/initramfs
 [ -d $image_initramfs ] || mkdir $image_initramfs
 
 arch=$(uname -m)
-[ $arch = 'i686' ] && arch="i386" # hack i686 to i386 packages :D
+[ ${arch} = 'i686' ] && arch="i386" # hack i686 to i386 packages :D
 
 ### KERNEL BUILD ###
 cd $sources_kernel
 
-if [ -f ${build_kernel}/*/arch/$arch/boot/bzImage ] ; then
+if [ -f ${build_kernel}/*/arch/${arch}/boot/bzImage ] ; then
     echo -e "Do you want to use previously build kernel? (use n if want to rebuild on changed config) [Y/n]:"
     read choice
     choice=${choice:-Y}
@@ -148,30 +148,49 @@ fi
 
 ### USERSPACE BUILD ###
 cd $sources_userspace
-echo -e "${WHITE}Step 2.1.${GREEN} Downloading userspace${ENDC}"
-wget --no-clobber --show-progress ${busybox_source_package}
 
-echo -e "${WHITE}Step 2.2.${GREEN} Extracting userspace${ENDC}"
-pv *.tar.bz2 | tar -xjv -C ${build_userspace} -f -
+if [ -f ${build_userspace}/*/busybox ] ; then
+    echo -e "Do you want to use previously build userspace toolkit? (use n if want to rebuild on changed config) [Y/n]:"
+    read userspace_choice
+    userspace_choice=${userspace_choice:-Y}
+fi
 
-echo -e "${WHITE}Step 2.3.${GREEN} Making default userspace config${ENDC}"
-cd ${build_userspace}/busybox*
-make defconfig
+if [[ "$userspace_choice" =~ ^[Yy]$ ]]; then
+    echo -e "Using already build userspace toolkit from ${build_userspace}"
+else
+    echo -e "${WHITE}Step 2.1.${GREEN} Downloading userspace${ENDC}"
+    wget --no-clobber --show-progress ${busybox_source_package}
 
-echo -e "${WHITE}Step 2.4.${GREEN} Switching to static linking${ENDC}"
-sed 's/^.*CONFIG_STATIC.*$/CONFIG_STATIC=y/' -i .config # for static linking
-sed 's/^CONFIG_MAN=y/CONFIG_MAN=n/' -i .config  # no manual pages
-echo "CONFIG_STATIC_LIBGCC=y" >> .config   ## this might be no longer needed? Need to check busybox sources
+    echo -e "${WHITE}Step 2.2.${GREEN} Extracting userspace${ENDC}"
+    pv *.tar.bz2 | tar -xjv -C ${build_userspace} -f -
 
-echo -e "${WHITE}Step 2.5.${GREEN} Fixing of busybox traffic control related symbols ${ENDC}"
-sed 's/^CONFIG_TC=y/CONFIG_TC=n/' -i .config    # some newer kernels are not providing traffic control defines anymore
+    echo -e "${WHITE}Step 2.3.${GREEN} Making default userspace config${ENDC}"
 
-echo -e "${WHITE}Step 2.6.${GREEN} Building userspace${ENDC}"
-make -j$(nproc)
+    cd ${build_userspace}/busybox*
+    build_userspace=$(pwd)
 
-echo -e "${WHITE}Step 2.7.${GREEN} Installing userspace${ENDC}"
-make CONFIG_PREFIX=${image_initramfs} install
-rm ${image_initramfs}/linuxrc
+    if [ -f ${build_userspace}/.config ] ; then
+        echo -e "Using existing config found in ${BLUE}${build_userspace}/.config${ENDC} - not generating new one\n"
+
+    else
+        make defconfig
+    fi
+
+    echo -e "${WHITE}Step 2.4.${GREEN} Switching to static linking${ENDC}"
+    sed 's/^.*CONFIG_STATIC.*$/CONFIG_STATIC=y/' -i .config # for static linking
+    sed 's/^CONFIG_MAN=y/CONFIG_MAN=n/' -i .config  # no manual pages
+    echo "CONFIG_STATIC_LIBGCC=y" >> .config   # configure static libgcc
+
+    echo -e "${WHITE}Step 2.5.${GREEN} Fixing of busybox traffic control related symbols ${ENDC}"
+    sed 's/^CONFIG_TC=y/CONFIG_TC=n/' -i .config    # some newer kernels are not providing traffic control defines anymore
+
+    echo -e "${WHITE}Step 2.6.${GREEN} Building userspace${ENDC}"
+    make -j$(nproc)
+
+    echo -e "${WHITE}Step 2.7.${GREEN} Installing userspace${ENDC}"
+    make CONFIG_PREFIX=${image_initramfs} install
+    rm ${image_initramfs}/linuxrc
+fi
 
 echo -e "${WHITE}Step 3.1.${GREEN} Creating init script${ENDC}"
 cd ${image_initramfs}
@@ -191,11 +210,6 @@ chmod +x ./init
 
 echo -e "${WHITE}Step 3.3.${GREEN} Creating initramfs${ENDC}"
 find . | cpio -o -H newc > ${image}/initramfs.cpio
-
-# echo -e "${WHITE}Step 3.4.${RED} Running temporary qemu to test bzImage and initramfs! Still flaky and full of warnings :D${ENDC}"
-# ### CTRL + a x to kill nographic qemu
-#cd ${image}
-#qemu-system-x86_64 --kernel ${image}/bzImage --initrd ${image}/initramfs.cpio
 
 ### IMAGE CREATION ###
 echo -e "${WHITE}Step 4.1.${GREEN} Creating boot image${ENDC}"
