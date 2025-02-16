@@ -6,13 +6,18 @@ set -e
 # 2. Userspace (busybox)
 # 3. Bootloader (syslinux)
 
-#### CONFIFURATION ####
+#### CONFIGURATION ####
 kernel_source_package="https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.13.tar.xz"
 busybox_source_package="https://www.busybox.net/downloads/busybox-1.37.0.tar.bz2"
+toybox_source_package="https://github.com/landley/toybox/archive/refs/tags/0.8.12.tar.gz"
+
+# default userspace is toybox, use -u to change
+selected_userspace="toybox"
 
 #### COLORS ####
 RED="\e[91m"
 GREEN="\e[92m"
+YELLOW="\e[93m"
 BLUE="\e[94m"
 WHITE="\e[97m"
 ENDC="\e[0m"
@@ -124,6 +129,21 @@ elif [[ "$1" == "--distclean" ]] || [[ "$1" == "-c" ]]; then
 elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     help
     exit 0
+
+elif [[ "$1" == "--userspace" ]] || [[ "$1" == "-u" ]]; then
+    
+    if [[ "$2" == "busybox" ]]; then 
+        echo -e "Selected busybox"
+        selected_userspace="busybox"
+
+    elif [[ "$2" == "toybox" ]]; then
+        echo -e "Selected toybox"
+        selected_userspace="toybox"
+    else
+        echo -e "${RED}Error: ${WHITE}Userspace ${RED}$2${WHITE} is not a valid option${ENDC}!"
+        echo -e "Valid options are ${GREEN}busybox${ENDC} or ${GREEN}toybox${ENDC}"
+        exit 1
+    fi
 fi
 
 
@@ -199,53 +219,108 @@ fi
 ### USERSPACE BUILD ###
 cd $sources_userspace
 
-eval "userspace_file=(${build_userspace}/*/busybox)"
+eval "busybox_userspace_file=(${build_userspace}/*/busybox)"
+eval "toybox_userspace_file=(${build_userspace}/*/toybox)"
 
-if [ -f ${userspace_file} ] ; then
-    echo -e "Do you want to use previously build userspace toolkit from ${BLUE}${userspace_file}${ENDC}? (use n if want to rebuild on changed config) [Y/n]:"
-    read userspace_kernel_choice
-    userspace_kernel_choice=${userspace_kernel_choice:-Y}
-fi
+if [[ ${selected_userspace} == "busybox" ]]; then
 
-if [[ "$userspace_kernel_choice" =~ ^[Yy]$ ]]; then
-    echo -e "Using already build userspace toolkit from ${build_userspace}"
-else
-    print_step "2.1" "Downloading userspace"
-    wget --no-clobber --show-progress ${busybox_source_package}
-
-    if [ -f  ${build_userspace}/.extracted ] ; then    
-        echo -e "Extracted userspace found in ${BLUE}${build_userspace}${ENDC} - skipping extraction\n"
-    else
-        print_step "2.2" "Extracting userspace"
-        pv *.tar.bz2 | tar -xjv -C ${build_userspace} -f -
-        touch ${build_userspace}/.extracted
+    if [ -f ${toybox_userspace_file} ] ; then
+        echo -e "${YELLOW}Warning: ${ENDC}Toybox binary already found in ${BLUE}${build_userspace}${ENDC}. Consider calling this script with --distclean first!"
+        echo -e "${YELLOW}Warning: ${ENDC}Build might be corrupted or might contain unnecessary files. Press [Enter] to continue!"
+        read
+    fi
+    if [ -f ${busybox_userspace_file} ] ; then
+        echo -e "Do you want to use previously build userspace toolkit from ${BLUE}${busybox_userspace_file}${ENDC}? (use n if want to rebuild on changed config) [Y/n]:"
+        read userspace_choice
+        userspace_choice=${userspace_choice:-Y}
     fi
 
-    print_step "2.3" "Making default userspace config"
-    cd ${build_userspace}/busybox*
-    build_userspace=$(pwd)
-
-    if [ -f ${build_userspace}/.config ] ; then
-        echo -e "Using existing config found in ${BLUE}${build_userspace}/.config${ENDC} - not generating new one\n"
-
+    if [[ "$userspace_choice" =~ ^[Yy]$ ]]; then
+        echo -e "Using already build userspace toolkit from ${build_userspace}"
     else
-        make defconfig
+        print_step "2.1" "Downloading userspace"
+        wget --no-clobber --show-progress ${busybox_source_package}
+
+        if [ -f  ${build_userspace}/.busybox_extracted ] ; then    
+            echo -e "Extracted userspace found in ${BLUE}${build_userspace}${ENDC} - skipping extraction\n"
+        else
+            print_step "2.2" "Extracting userspace"
+            pv *.tar.bz2 | tar -xjv -C ${build_userspace} -f -
+            touch ${build_userspace}/.busybox_extracted
+        fi
+
+        print_step "2.3" "Making default userspace config"
+        cd ${build_userspace}/busybox*
+        build_userspace=$(pwd)
+
+        if [ -f ${build_userspace}/.config ] ; then
+            echo -e "Using existing config found in ${BLUE}${build_userspace}/.config${ENDC} - not generating new one\n"
+
+        else
+            make defconfig
+        fi
+
+        print_step "2.4" "Switching to static linking"
+        sed 's/^.*CONFIG_STATIC.*$/CONFIG_STATIC=y/' -i .config # for static linking
+        sed 's/^CONFIG_MAN=y/CONFIG_MAN=n/' -i .config  # no manual pages
+        echo "CONFIG_STATIC_LIBGCC=y" >> .config   # configure static libgcc
+
+        print_step "2.5" "Fixing of busybox traffic control related symbols"
+        sed 's/^CONFIG_TC=y/CONFIG_TC=n/' -i .config    # some newer kernels are not providing traffic control defines anymore
+
+        print_step "2.6" "Building userspace"
+        make -j$(nproc)
+
+        print_step "2.7" "Installing userspace"
+        make CONFIG_PREFIX=${image_initramfs} install
+        rm ${image_initramfs}/linuxrc
     fi
 
-    print_step "2.4" "Switching to static linking"
-    sed 's/^.*CONFIG_STATIC.*$/CONFIG_STATIC=y/' -i .config # for static linking
-    sed 's/^CONFIG_MAN=y/CONFIG_MAN=n/' -i .config  # no manual pages
-    echo "CONFIG_STATIC_LIBGCC=y" >> .config   # configure static libgcc
+elif [[ ${selected_userspace} == "toybox" ]]; then
 
-    print_step "2.5" "Fixing of busybox traffic control related symbols"
-    sed 's/^CONFIG_TC=y/CONFIG_TC=n/' -i .config    # some newer kernels are not providing traffic control defines anymore
+    if [ -f ${busybox_userspace_file} ] ; then
+        echo -e "${YELLOW}Warning: ${ENDC}Busybox binary already found in ${BLUE}${build_userspace}${ENDC}. Consider calling this script with --distclean first!"
+        echo -e "${YELLOW}Warning: ${ENDC}Build might be corrupted or might contain unnecessary files. Press [Enter] to continue!"
+        read
+    fi
+    if [ -f ${toybox_userspace_file} ] ; then
+        echo -e "Do you want to use previously build userspace toolkit from ${BLUE}${toybox_userspace_file}${ENDC}? (use n if want to rebuild on changed config) [Y/n]:"
+        read userspace_choice
+        userspace_choice=${userspace_choice:-Y}
+    fi
 
-    print_step "2.6" "Building userspace"
-    make -j$(nproc)
+    if [[ "$userspace_choice" =~ ^[Yy]$ ]]; then
+        echo -e "Using already build userspace toolkit from ${build_userspace}"
+    else
+        print_step "2.1" "Downloading userspace"
+        wget --no-clobber --show-progress ${toybox_source_package}
 
-    print_step "2.7" "Installing userspace"
-    make CONFIG_PREFIX=${image_initramfs} install
-    rm ${image_initramfs}/linuxrc
+        if [ -f  ${build_userspace}/.toybox_extracted ] ; then    
+            echo -e "Extracted userspace found in ${BLUE}${build_userspace}${ENDC} - skipping extraction\n"
+        else
+            print_step "2.2" "Extracting userspace"
+            pv *.tar.gz | tar -xz -C ${build_userspace} -f -
+            touch ${build_userspace}/.toybox_extracted
+        fi
+
+        print_step "2.3" "Making default userspace config"
+        cd ${build_userspace}/toybox*
+        build_userspace=$(pwd)
+
+        if [ -f ${build_userspace}/.config ] ; then
+            echo -e "Using existing config found in ${BLUE}${build_userspace}/.config${ENDC} - not generating new one\n"
+        else
+            export LDFLAGS=--static 
+            make defconfig
+            echo "CONFIG_SH=y" >> .config   # build shell from pending toys
+        fi
+
+        print_step "2.4" "Building userspace"
+        make -j$(nproc)
+
+        print_step "2.5" "Installing userspace"
+        PREFIX=${image_initramfs} make install
+    fi
 fi
 
 print_step "3.1" "Creating init script"
