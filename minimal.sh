@@ -312,7 +312,8 @@ elif [[ ${selected_userspace} == "toybox" ]]; then
         else
             export LDFLAGS=--static 
             make defconfig
-            echo "CONFIG_SH=y" >> .config   # build shell from pending toys
+            echo "CONFIG_SH=y" >> .config      # build shell from pending toys
+            echo "CONFIG_ROUTE=y" >> .config   # build route from pending toys
         fi
 
         print_step "2.4" "Building userspace"
@@ -329,9 +330,22 @@ cd ${image_initramfs}
 cat << EOF > ./init
 #!/bin/sh
 
+# Fake TTYs
 ln -sf /dev/null /dev/tty2
 ln -sf /dev/null /dev/tty3
 ln -sf /dev/null /dev/tty4
+
+# Setup proc and sysfs
+mkdir /proc && mount -t proc proc /proc
+mkdir /sys && mount -t sysfs sys /sys
+
+# SETUP QEMU networking
+ifconfig lo 127.0.0.1
+ifconfig eth0 10.0.2.15
+route add default gw 10.0.2.2
+
+# Fix for not working ping
+echo 0 99999 > /proc/sys/net/ipv4/ping_group_range
 
 /bin/sh
 EOF
@@ -374,4 +388,4 @@ rm boot_mount -rf
 
 ### RUN ###
 print_step "5.1" "Starting qemu with kernel and initramfs packed in boot.img"
-qemu-system-x86_64 -drive format=raw,file=./boot.img
+qemu-system-x86_64 -drive format=raw,file=./boot.img -net nic -net user
