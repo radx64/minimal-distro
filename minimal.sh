@@ -72,6 +72,8 @@ help()
     echo -e "-d, --deps         Checks if host system has all necessary"
     echo -e "                   packages installed (uses dpkg)"
     echo -e "-h, --help         Prints this help"
+    echo -e "-u, --userspace    Selects preferred userspace"
+    echo -e "                   valid options are ${RED}busybox${ENDC} or ${RED}toybox${ENDC}"
 }
 
 check_dependencies() {
