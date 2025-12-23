@@ -334,6 +334,19 @@ fi
 print_step "3.1" "Creating init script"
 cd ${image_initramfs}
 
+cat << EOF > ./welcome
+======================================================
+
+ _____ __    ____  
+|     |  |  |    \ 
+| | | |  |__|  |  |
+|_|_|_|_____|____/ 
+
+Welcome in Minimal Linux Distro build by radx64 script
+    
+======================================================
+EOF
+
 cat << EOF > ./init
 #!/bin/sh
 
@@ -353,6 +366,8 @@ route add default gw 10.0.2.2
 
 # Fix for not working ping
 echo 0 99999 > /proc/sys/net/ipv4/ping_group_range
+
+cat welcome
 
 /bin/sh
 EOF
