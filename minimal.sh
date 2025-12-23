@@ -50,7 +50,8 @@ build_requirements=(
     "syslinux"
 )
 
-distro_dir=$(pwd)/distro
+scripts_dir=$(pwd)
+distro_dir=${scripts_dir}/distro
 [ -d ${distro_dir} ] || mkdir ${distro_dir}
 
 help()
@@ -208,13 +209,17 @@ else
         echo -e "Using existing config found in ${BLUE}${build_kernel}/.config${ENDC} - not generating new one\n"
 
     else
-        make defconfig  #try smaller config later (tinyconfig?)
+        make ARCH=x86_64 tinyconfig
+        print_step "1.4.1" "Patching kernel configuration"
+        ${build_kernel}/scripts/kconfig/merge_config.sh ${build_kernel}/.config ${scripts_dir}/tiny_config_patch.fragment
+        print_step "1.4.2" "Rebuilding kernel configuration"
+        make olddefconfig
     fi
 
-    print_step "1.4" "Building kernel"
+    print_step "1.5" "Building kernel"
     make -j$(nproc)
 
-    print_step "1.5" "Saving bzImage"
+    print_step "1.6" "Saving bzImage"
     cp arch/$arch/boot/bzImage $image 
 fi
 
