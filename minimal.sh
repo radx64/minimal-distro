@@ -204,7 +204,7 @@ else
     cd $build_kernel/linux*
     build_kernel=$(pwd)
 
-    print_step "1.3" "Making default kernel config"
+    print_step "1.3" "Making tiny kernel config"
     if [ -f ${build_kernel}/.config ] ; then
         echo -e "Using existing config found in ${BLUE}${build_kernel}/.config${ENDC} - not generating new one\n"
 
